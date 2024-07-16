@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:nutricare/AI%20Stuff/camerastream.dart';
 import 'package:nutricare/AI%20Stuff/imagefoodclassification.dart';
+import 'package:nutricare/nutritionix/nutrionixsearch.dart';
 import 'package:nutricare/pages/chat.dart';
 import 'package:nutricare/pages/daily_tips.dart';
 import 'package:nutricare/pages/diet_planner.dart';
@@ -13,6 +14,8 @@ import 'package:nutricare/pages/signup.dart';
 import 'package:nutricare/pages/useraccount.dart';
 import 'package:nutricare/pages/welcomesceen.dart';
 import 'package:nutricare/randomutilities/bottomnavigationbarpagemanager.dart';
+import 'nutritionix/nutrionixexercise.dart';
+import 'nutritionix/nutritionixapi.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -41,8 +44,7 @@ void main() async {
     '/UserAccount': (context) => managePage('/UserAccount'),
     '/Loading': (context) => LoadingScreen(),
         '/Welcome': (context) => WelcomeScreen(),
-        '/TestingTEST': (context) => FoodClassification(),
-        '/CameraTEST': (context) => CameraStream(),
+        '/FoodapiTEST': (context)=> Nutrionixexercise(),
   }));
 }
 

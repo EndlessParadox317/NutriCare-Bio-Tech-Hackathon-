@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:tflite_flutter/tflite_flutter.dart' as tfl;
@@ -7,16 +8,13 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'dart:async';
 
 class CameraStream extends StatefulWidget {
-  final Function(String, String) onFoodDetected;
-
-  const CameraStream({super.key, required this.onFoodDetected});
+  const CameraStream({super.key});
 
   @override
   State<CameraStream> createState() => _CameraStreamState();
 }
 
 class _CameraStreamState extends State<CameraStream> {
-  Map<String, String> labelCaloriesMap = {};
   CameraController? _cameraController;
   tfl.Interpreter? _interpreter;
   bool _isDetecting = false;
@@ -31,7 +29,6 @@ class _CameraStreamState extends State<CameraStream> {
     super.initState();
     _loadModel();
     _loadLabels();
-    _initializeCamera(); // Ensure camera initialization is triggered here
   }
 
   @override
@@ -63,7 +60,6 @@ class _CameraStreamState extends State<CameraStream> {
               final bytes = await image.readAsBytes();
               _runModelOnImage(bytes);
             }
-            _isDetecting = false; // Ensure to reset detecting status
           }
         });
 
@@ -78,8 +74,7 @@ class _CameraStreamState extends State<CameraStream> {
 
   Future<void> _loadModel() async {
     try {
-      _interpreter =
-          await tfl.Interpreter.fromAsset('assets/foodpretrainedmodel.tflite');
+      _interpreter = await tfl.Interpreter.fromAsset('assets/foodpretrainedmodel.tflite');
       print('Model loaded successfully');
     } catch (e) {
       print('Error loading model: $e');
@@ -88,27 +83,18 @@ class _CameraStreamState extends State<CameraStream> {
 
   Future<void> _loadLabels() async {
     try {
-      final csvData =
-          await rootBundle.loadString('assets/foodpretrainedmodel2.csv');
+      final csvData = await rootBundle.loadString('assets/foodpretrainedmodel.csv');
       final lines = csvData.split('\n');
-      labels = []; // This will store the names for direct access
-      labelCaloriesMap =
-          {}; // This map will associate names with their calories
-      for (var i = 1; i < lines.length; i++) {
-        // Skip the header
+      labels = [];
+      for (var i = 1; i < lines.length; i++) { // Skip the first line (header)
         final parts = lines[i].split(',');
-        if (parts.length > 2) {
-          final id =
-              parts[0].trim(); // ID, not directly used but useful for reference
-          final name = parts[1].trim(); // Name of the food
-          final calories = parts[2].trim(); // Calorie information
-          labels.add(name); // Store name
-          labelCaloriesMap[name] = calories; // Associate name with calories
+        if (parts.length > 1) {
+          labels.add(parts[1].trim());
         }
       }
-      print('Names and calories loaded');
+      print('Labels loaded: $labels');
     } catch (e) {
-      print('Error loading names and calories: $e');
+      print('Error loading labels: $e');
     }
   }
 
@@ -130,8 +116,7 @@ class _CameraStreamState extends State<CameraStream> {
       final outputList = output[0].map((e) => e.toDouble()).toList();
 
       // Ensure the reduce function uses the correct type
-      final predictedIndex = outputList.indexWhere(
-          (element) => element == outputList.reduce((a, b) => a > b ? a : b));
+      final predictedIndex = outputList.indexWhere((element) => element == outputList.reduce((a, b) => a > b ? a : b));
       setState(() {
         _predictedLabel = labels[predictedIndex];
         _confidence = outputList[predictedIndex];
@@ -155,31 +140,19 @@ class _CameraStreamState extends State<CameraStream> {
       _interpreter?.run(input, output);
       print('Model run complete');
 
+      print('Output tensor: $output');
+
       // Convert output tensor to a list of doubles
       final outputList = output[0].map((e) => e.toDouble()).toList();
 
-      // Use dynamic types for the reduce function to avoid type issues
-      final predictedIndex = outputList.indexWhere((element) =>
-          element ==
-          outputList.reduce((dynamic a, dynamic b) => a > b ? a : b));
-      final String predictedName =
-          labels[predictedIndex]; // Use the index to get the name
-      final String predictedCalories =
-          labelCaloriesMap[predictedName] ?? 'Unknown';
-      final double confidence = outputList[
-          predictedIndex]; // Do not multiply by 100 if not showing as percentage
-
+      // Ensure the reduce function uses the correct type
+      final predictedIndex = outputList.indexWhere((element) => element == outputList.reduce((a, b) => a > b ? a : b));
       setState(() {
-        _predictedLabel = '$predictedName - Calories: $predictedCalories';
-        _confidence = confidence.toStringAsFixed(
-            2); // Adjust based on whether you need to scale or convert to percentage
+        _predictedLabel = labels[predictedIndex];
+        _confidence = outputList[predictedIndex];
       });
     } catch (e) {
       print('Error running model on image: $e');
-      setState(() {
-        _predictedLabel = 'Error';
-        _confidence = '0';
-      });
     } finally {
       _isDetecting = false;
     }
@@ -187,12 +160,8 @@ class _CameraStreamState extends State<CameraStream> {
 
   List<List<List<List<int>>>> _preprocessCameraImage(CameraImage image) {
     final img.Image convertedImage = _convertCameraImage(image);
-    final resizedImage =
-        img.copyResize(convertedImage, width: 224, height: 224);
-    final input = List.generate(
-        1,
-        (i) => List.generate(
-            224, (j) => List.generate(224, (k) => List.generate(3, (l) => 0))));
+    final resizedImage = img.copyResize(convertedImage, width: 224, height: 224);
+    final input = List.generate(1, (i) => List.generate(224, (j) => List.generate(224, (k) => List.generate(3, (l) => 0))));
     for (int y = 0; y < 224; y++) {
       for (int x = 0; x < 224; x++) {
         final pixel = resizedImage.getPixel(x, y);
@@ -206,12 +175,8 @@ class _CameraStreamState extends State<CameraStream> {
 
   List<List<List<List<int>>>> _preprocessMemoryImage(Uint8List imageBytes) {
     final img.Image convertedImage = img.decodeImage(imageBytes)!;
-    final resizedImage =
-        img.copyResize(convertedImage, width: 224, height: 224);
-    final input = List.generate(
-        1,
-        (i) => List.generate(
-            224, (j) => List.generate(224, (k) => List.generate(3, (l) => 0))));
+    final resizedImage = img.copyResize(convertedImage, width: 224, height: 224);
+    final input = List.generate(1, (i) => List.generate(224, (j) => List.generate(224, (k) => List.generate(3, (l) => 0))));
     for (int y = 0; y < 224; y++) {
       for (int x = 0; x < 224; x++) {
         final pixel = resizedImage.getPixel(x, y);
@@ -239,8 +204,7 @@ class _CameraStreamState extends State<CameraStream> {
           final byteIndex = y * rowStride + x * pixelStride;
           if (byteIndex < bytes.length) {
             final pixelValue = bytes[byteIndex];
-            imgImage.setPixel(
-                x, y, img.getColor(pixelValue, pixelValue, pixelValue));
+            imgImage.setPixel(x, y, img.getColor(pixelValue, pixelValue, pixelValue));
           }
         }
       }
@@ -255,40 +219,32 @@ class _CameraStreamState extends State<CameraStream> {
       appBar: AppBar(
         title: Text('Live Object Detection'),
       ),
-      body: Stack(
+      body: Column(
         children: [
-          if (_cameraController != null && _cameraController!.value.isInitialized)
-            Positioned.fill(
-              child: CameraPreview(_cameraController!),
-            )
-          else
-            Center(
-              child: CircularProgressIndicator(),
-            ),
-          Positioned(
-            top: 20,
-            left: 0,
-            right: 0,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8.0),
-              color: Colors.black.withOpacity(0.5),
-              child: Text(
-                'Detected: $_predictedLabel (Confidence: $_confidence)',
-                style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white),
-                textAlign: TextAlign.center,
-              ),
-            ),
+          ElevatedButton(
+            onPressed: () {
+              setState(() {
+                _isCameraMode = !_isCameraMode;
+                if (_isCameraMode) {
+                  _initializeCamera();
+                } else {
+                  _cameraController?.dispose();
+                  _cameraController = null;
+                }
+              });
+            },
+            child: Text(_isCameraMode ? 'Stop Camera Stream' : 'Start Camera Stream'),
+          ),
+          Expanded(
+            child: _cameraController != null && _cameraController!.value.isInitialized
+                ? CameraPreview(_cameraController!)
+                : Center(child: CircularProgressIndicator()),
+          ),
+          Text(
+            'Predicted Label: $_predictedLabel (Confidence: $_confidence)',
+            style: TextStyle(fontSize: 20),
           ),
         ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          widget.onFoodDetected(_predictedLabel, _confidence.toString());
-        },
-        child: Icon(Icons.check),
       ),
     );
   }
